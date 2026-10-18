@@ -12,6 +12,16 @@ load_dotenv()
 
 api_key = os.getenv("GOOGLE_API_KEY")
 
+if not api_key:
+    try:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+    except Exception:
+        api_key = None
+
+if not api_key:
+    st.error("GOOGLE_API_KEY belum diatur. Isi di Secrets (cloud) atau file .env (lokal).")
+    st.stop()
+
 
 # ============================================
 # GEMINI CLIENT
