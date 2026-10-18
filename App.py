@@ -361,23 +361,27 @@ if prompt:
 
 
     # Kirim pesan ke Gemini
-
-    response = st.session_state.chat.send_message(
-        prompt
-    )
-
+    # response = st.session_state.chat.send_message(
+    #     prompt
+    # )
 
     # Ambil jawaban Gemini
-
-    answer = response.text
-
+    # answer = response.text
 
     # Tampilkan jawaban MediFirst
+    # with st.chat_message("assistant"):
+    #     st.markdown(answer)
 
+    # merubah agar jawaban muncul per token (streaming) agar lebih cepat muncul
+    # Generator: ambil potongan teks dari Gemini satu per satu
+    def stream_answer():
+        for chunk in st.session_state.chat.send_message_stream(prompt):
+            if chunk.text:
+                yield chunk.text
+
+    # Tampilkan jawaban secara bertahap
     with st.chat_message("assistant"):
-
-        st.markdown(answer)
-
+        answer = st.write_stream(stream_answer())
 
     # Simpan jawaban MediFirst
 
