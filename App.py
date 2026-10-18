@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 import os
 
 import time
-from google.genai import errors
+from google.genai import types, errors
 
-
+MODELS = ["gemini-3.6-flash", "gemini-2.5-flash"]
 # ============================================
 # LOAD ENVIRONMENT VARIABLE
 # ============================================
@@ -310,14 +310,52 @@ if "chat" not in st.session_state:
         }
     )
 
-
 # ============================================
 # CHAT HISTORY
 # ============================================
 
 if "messages" not in st.session_state:
-
     st.session_state.messages = []
+
+
+# ============================================
+# FUNGSI: HISTORY & STREAMING DENGAN FALLBACK
+# ============================================
+
+def build_history(messages):
+    """Ubah riwayat Streamlit menjadi format history Gemini."""
+    history = []
+    for m in messages:
+        if m["content"].startswith("⚠️"):   # lewati pesan error
+            continue
+        role = "user" if m["role"] == "user" else "model"
+        history.append(
+            types.Content(role=role, parts=[types.Part(text=m["content"])])
+        )
+    return history
+
+
+def stream_answer(prompt, history):
+    for model_name in MODELS:
+        started = False
+        try:
+            chat = client.chats.create(
+                model=model_name,
+                config={"system_instruction": system_instruction},
+                history=history,
+            )
+            for chunk in chat.send_message_stream(prompt):
+                if chunk.text:
+                    started = True
+                    yield chunk.text
+            return                          # sukses, selesai
+        except errors.APIError:
+            if started:                     # sudah tampil sebagian, jangan dobel
+                yield "\n\n⚠️ Koneksi terputus di tengah jawaban. Coba kirim ulang pertanyaanmu."
+                return
+            # belum ada teks -> lanjut ke model berikutnya
+
+    yield "⚠️ Server AI sedang sibuk. Coba kirim ulang pesanmu beberapa saat lagi."
 
 
 # ============================================
@@ -325,21 +363,15 @@ if "messages" not in st.session_state:
 # ============================================
 
 for message in st.session_state.messages:
-
     with st.chat_message(message["role"]):
-
-        st.markdown(
-            message["content"]
-        )
+        st.markdown(message["content"])
 
 
 # ============================================
 # CHAT INPUT
 # ============================================
 
-prompt = st.chat_input(
-    "Ceritakan keluhan kesehatanmu..."
-)
+prompt = st.chat_input("Ceritakan keluhan kesehatanmu...")
 
 
 # ============================================
@@ -348,64 +380,18 @@ prompt = st.chat_input(
 
 if prompt:
 
-    # Tampilkan pesan user
+    # 1. Bangun riwayat dari pesan SEBELUM pesan baru ini
+    history = build_history(st.session_state.messages)
 
+    # 2. Tampilkan & simpan pesan user
     with st.chat_message("user"):
-
         st.markdown(prompt)
 
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # Simpan pesan user
-
-    st.session_state.messages.append({
-        "role": "user",
-        "content": prompt
-    })
-
-
-    # Kirim pesan ke Gemini
-    # response = st.session_state.chat.send_message(
-    #     prompt
-    # )
-
-    # Ambil jawaban Gemini
-    # answer = response.text
-
-    # Tampilkan jawaban MediFirst
-    # with st.chat_message("assistant"):
-    #     st.markdown(answer)
-
-    # merubah agar jawaban muncul per token (streaming) agar lebih cepat muncul
-    # Generator: ambil potongan teks dari Gemini satu per satu
-    def stream_answer():
-        for attempt in range(3):
-            started = False
-            try:
-                for chunk in st.session_state.chat.send_message_stream(prompt):
-                    if chunk.text:
-                        started = True
-                        yield chunk.text
-                return
-            except errors.ServerError:
-                # Jangan retry kalau teks sudah mulai tampil (supaya tidak dobel)
-                if started:
-                    yield "\n\n⚠️ Koneksi terputus di tengah jawaban. Coba kirim ulang pertanyaanmu."
-                    return
-                if attempt < 2:
-                    time.sleep(2 ** attempt)   # tunggu 1 detik, lalu 2 detik
-                else:
-                    yield (
-                        "⚠️ Server AI sedang sibuk. "
-                        "Coba kirim ulang pesanmu beberapa saat lagi."
-                    )
-
-    # Tampilkan jawaban secara bertahap
+    # 3. Tampilkan jawaban secara bertahap (streaming)
     with st.chat_message("assistant"):
-        answer = st.write_stream(stream_answer())
+        answer = st.write_stream(stream_answer(prompt, history))
 
-    # Simpan jawaban MediFirst
-
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": answer
-    })
+    # 4. Simpan jawaban
+    st.session_state.messages.append({"role": "assistant", "content": answer})
