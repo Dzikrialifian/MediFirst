@@ -3,6 +3,9 @@ from google import genai
 from dotenv import load_dotenv
 import os
 
+import time
+from google.genai import errors
+
 
 # ============================================
 # LOAD ENVIRONMENT VARIABLE
@@ -375,9 +378,26 @@ if prompt:
     # merubah agar jawaban muncul per token (streaming) agar lebih cepat muncul
     # Generator: ambil potongan teks dari Gemini satu per satu
     def stream_answer():
-        for chunk in st.session_state.chat.send_message_stream(prompt):
-            if chunk.text:
-                yield chunk.text
+        for attempt in range(3):
+            started = False
+            try:
+                for chunk in st.session_state.chat.send_message_stream(prompt):
+                    if chunk.text:
+                        started = True
+                        yield chunk.text
+                return
+            except errors.ServerError:
+                # Jangan retry kalau teks sudah mulai tampil (supaya tidak dobel)
+                if started:
+                    yield "\n\n⚠️ Koneksi terputus di tengah jawaban. Coba kirim ulang pertanyaanmu."
+                    return
+                if attempt < 2:
+                    time.sleep(2 ** attempt)   # tunggu 1 detik, lalu 2 detik
+                else:
+                    yield (
+                        "⚠️ Server AI sedang sibuk. "
+                        "Coba kirim ulang pesanmu beberapa saat lagi."
+                    )
 
     # Tampilkan jawaban secara bertahap
     with st.chat_message("assistant"):
