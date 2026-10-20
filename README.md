@@ -1,5 +1,7 @@
 # MediFirst
 
+live demo here : https://medifirst.streamlit.app/
+
 MediFirst is an AI-powered First-Aid & Health Triage Assistant built with Python, Streamlit, and the Google Gemini API.
 The project helps users perform an initial assessment of health complaints through a conversational approach. MediFirst gathers relevant information, asks clarification questions, assesses potential warning signs, and provides appropriate initial guidance.
 
